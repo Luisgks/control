@@ -1,0 +1,88 @@
+# Importar las librerías necesarias
+import pandas as pd
+from google.colab import drive
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn.linear_model import LinearRegression
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+import matplotlib.pyplot as plt
+
+# Montar Google Drive para acceder al archivo
+drive.mount('/content/gdrive')
+
+# Verificar el contenido de la carpeta en Google Drive
+!ls "gdrive/My Drive/control"
+
+# Ruta al archivo Excel
+file_path = 'gdrive/My Drive/control/control.xlsx'
+
+# Cargar los datos desde el archivo Excel
+df = pd.read_excel(file_path)
+
+# Mostrar las primeras filas para verificar que se cargaron correctamente
+print(df.head())
+
+# Mostrar los nombres de las columnas
+print("Columnas disponibles:", df.columns)
+
+# Reemplazar espacios en blanco con NaN y luego eliminar filas con NaN
+df = df.replace(' ', float('nan'))  # Reemplaza espacios en blanco con NaN
+df = df.dropna()  # Elimina filas con NaN
+
+# Asignar las variables independientes (X) y dependiente (y)
+X = df[['y(k-1)', 'y(k-2)', 'u(k)', 'u(k-1)', 'u(k-2)']]  # Variables independientes
+y = df['y(k)']  # Variable dependiente
+
+# Convertir las columnas a tipo numérico
+X = X.astype(float)
+y = y.astype(float)
+
+# Transformar las características a polinómicas de grado 1 (equivalente a regresión lineal)
+poly = PolynomialFeatures(degree=1, include_bias=False)  # Grado 1
+X_poly = poly.fit_transform(X)
+
+# Dividir los datos en conjuntos de entrenamiento y prueba
+X_train, X_test, y_train, y_test = train_test_split(X_poly, y, test_size=0.3, random_state=42)
+
+# Crear y entrenar el modelo de regresión
+model = LinearRegression()
+model.fit(X_train, y_train)
+
+# Obtener los coeficientes
+coefficients = model.coef_
+intercept = model.intercept_
+
+# Mostrar el intercepto y los coeficientes
+print(f"Intercepto: {intercept:.4f}")
+print("Coeficientes (Pesos):")
+for i, coef in enumerate(coefficients):
+    print(f"Coeficiente {i + 1}: {coef:.4f}")
+
+# Evaluar el modelo con el conjunto de prueba
+y_pred = model.predict(X_test)
+
+# Calcular métricas de rendimiento
+mse = mean_squared_error(y_test, y_pred)
+mae = mean_absolute_error(y_test, y_pred)
+r2 = r2_score(y_test, y_pred)
+
+# Calcular el porcentaje de precisión basado en R²
+precision_percentage = r2 * 100
+
+# Imprimir métricas de rendimiento y porcentaje de precisión
+print(f"\nMétricas de rendimiento en el conjunto de prueba:")
+print(f"Error cuadrático medio (MSE): {mse:.4f}")
+print(f"Error absoluto medio (MAE): {mae:.4f}")
+print(f"R² (Coeficiente de determinación): {r2:.4f}")
+print(f"Porcentaje de precisión del modelo en el conjunto de prueba: {precision_percentage:.2f}%")
+
+# Gráfico de dispersión de valores reales vs predichos
+plt.figure(figsize=(8, 8))
+plt.scatter(y_test, y_pred, color='blue', alpha=0.6, label='Predicciones')
+plt.plot([y.min(), y.max()], [y.min(), y.max()], color='red', linestyle='--', label='Ideal')
+plt.title('Valores Reales vs Predichos', fontsize=16)
+plt.xlabel('Valores Reales', fontsize=14)
+plt.ylabel('Valores Predichos', fontsize=14)
+plt.legend(fontsize=12)
+plt.grid(alpha=0.5)
+plt.show()
