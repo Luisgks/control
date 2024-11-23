@@ -1,0 +1,105 @@
+#include <Arduino.h>
+
+volatile long contador = 0;   // Contador de pulsos
+const int canalA = 2;         // Pin conectado al canal A del encoder
+const int canalB = 3;         // Pin conectado al canal B del encoder
+const int PPR = 203;          // Pulsos por revolución del encoder (ajusta según tu encoder)
+
+const int intervalo = 100;    // Intervalo de actualización de RPM (100 ms)
+const int tiempoEncendido = 2000; // Tiempo que el motor permanece encendido (ms)
+const int tiempoApagado = 3000;   // Tiempo que el motor permanece apagado (ms)
+
+float rpm = 0;                // Variable para guardar el cálculo del RPM
+const int pwmValor = 255;     // Valor fijo del PWM
+
+// Pines del puente H
+const int pinPWM = 9;         // Pin PWM para controlar la velocidad del motor
+const int pinIn1 = 7;         // Entrada 1 del puente H
+const int pinIn2 = 8;         // Entrada 2 del puente H
+
+bool motorEncendido = true;   // Estado actual del motor (encendido o apagado)
+unsigned long tiempoCambioEstado = 0; // Tiempo de referencia para alternar estado
+
+void setup() {
+    pinMode(canalA, INPUT_PULLUP);
+    pinMode(canalB, INPUT_PULLUP);
+
+    // Configurar pines del puente H
+    pinMode(pinPWM, OUTPUT);
+    pinMode(pinIn1, OUTPUT);
+    pinMode(pinIn2, OUTPUT);
+
+    // Configurar interrupción para el canal A
+    attachInterrupt(digitalPinToInterrupt(canalA), leerEncoder, CHANGE);
+
+    // Inicializar Monitor Serial
+    Serial.begin(115200);
+    Serial.println("RPM/920;Motor");
+
+    // Configurar motor para iniciar en estado encendido
+    digitalWrite(pinIn1, HIGH);
+    digitalWrite(pinIn2, LOW);
+    analogWrite(pinPWM, pwmValor);
+}
+
+void loop() {
+    unsigned long tiempoActual = millis();
+
+    // Alternar el estado del motor entre encendido y apagado
+    if (motorEncendido && tiempoActual - tiempoCambioEstado >= tiempoEncendido) {
+        apagarMotor();
+        tiempoCambioEstado = tiempoActual;
+    } else if (!motorEncendido && tiempoActual - tiempoCambioEstado >= tiempoApagado) {
+        encenderMotor();
+        tiempoCambioEstado = tiempoActual;
+    }
+
+    // Calcular RPM cada intervalo fijo
+    static unsigned long tiempoUltimaLectura = 0;
+    if (tiempoActual - tiempoUltimaLectura >= intervalo) {
+        tiempoUltimaLectura = tiempoActual;
+
+        // Calcular las vueltas en el intervalo
+        float vueltas = contador / (float)PPR;
+
+        // Sólo calcular RPM si hubo pulsos
+        if (contador > 0) {
+            rpm = vueltas * (60000.0 / intervalo);
+        } else {
+            rpm = 0; // Si no hubo pulsos, RPM es 0
+        }
+
+        contador = 0; // Reiniciar el contador para el siguiente intervalo
+
+        // Enviar información al Monitor Serial
+        Serial.print(rpm / 920, 2); // Mostrar RPM dividido entre 920 con 2 decimales
+        Serial.print(";");
+        Serial.println((motorEncendido && rpm > 0) ? 1 : 0); // Motor activo (1) o inactivo (0)
+    }
+}
+
+void encenderMotor() {
+    motorEncendido = true;
+    digitalWrite(pinIn1, HIGH);
+    digitalWrite(pinIn2, LOW);
+    analogWrite(pinPWM, pwmValor);
+}
+
+void apagarMotor() {
+    motorEncendido = false;
+    digitalWrite(pinIn1, LOW);
+    digitalWrite(pinIn2, LOW);
+    analogWrite(pinPWM, 0);
+
+    // Pausa adicional para garantizar que el motor se detenga
+    delay(500);
+}
+
+void leerEncoder() {
+    // Detectar sentido de giro según las señales A y B
+    if (digitalRead(canalA) == digitalRead(canalB)) {
+        contador++; // Incrementar para sentido horario
+    } else {
+        contador--; // Decrementar para sentido antihorario
+    }
+}
